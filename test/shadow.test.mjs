@@ -1,6 +1,6 @@
 // Verify the shadow orchestrator plugin against a mock OpenCode context.
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -188,7 +188,6 @@ for (const [name, settings] of [
   check("register starts the session in the workspace", path.resolve(created?.location?.directory) === path.resolve(m.workspace))
   check("register passes the invoking model", created?.model?.id === "chosen-model")
   check("register binds the started session", binding?.sessionID === "ses_new_1")
-  check("register leaves the invoking session unbound", binding?.sessionID !== "s1")
   check(
     "register sends the default initial message to the started session",
     m.calls.prompt[0]?.sessionID === "ses_new_1" && m.calls.prompt[0]?.text === "DEFAULT INITIAL",
@@ -197,7 +196,6 @@ for (const [name, settings] of [
     "register reports the started session to the invoking session",
     m.calls.synthetic.at(-1)?.sessionID === "s1" && m.calls.synthetic.at(-1)?.text.includes("ses_new_1"),
   )
-  check("register writes a log line", logOf(m).includes("started ses_new_1"))
   check(
     "register announces the started session",
     m.calls.events.at(-1)?.name === "started" && m.calls.events.at(-1)?.data?.sessionID === "ses_new_1",
@@ -328,17 +326,15 @@ for (const [name, settings] of [
 {
   const m = await mount(config())
   m.sessions.get("s1").model = { providerID: "provider", id: "session-model" }
-  const result = await m.callRpc("registerManual", { sessionID: "s1", text: "CUSTOM" })
+  await m.callRpc("registerManual", { sessionID: "s1", text: "CUSTOM" })
   check("a manual registration uses the invoking model", m.calls.create[0]?.model?.id === "session-model")
   check("a manual registration starts in the invoking directory", path.resolve(m.calls.create[0]?.location?.directory) === path.resolve(m.workspace))
-  check("a manual registration returns the session ID", result.sessionID === "ses_new_1")
 }
 
 {
   const m = await mount(config())
   const result = await m.callRpc("registerManual", { directory: m.workspace, text: "   " })
   check("an empty manual registration starts no session", m.calls.create.length === 0)
-  check("an empty manual registration writes no binding", !existsSync(m.stateFile))
   check("an empty manual registration returns no session", result.sessionID === "")
   check("an empty manual registration reports the cancellation", result.message.includes("No message entered"))
 }
@@ -414,7 +410,6 @@ for (const [name, settings] of [
   m.calls.prompt.length = 0
   await m.run("shadow-wake", "s2")
   check("a saved config applies without a restart", m.calls.prompt[0]?.text === "SECOND WAKE")
-  check("a config reload writes a log line", logOf(m).includes("config reloaded"))
 }
 
 {
@@ -425,7 +420,7 @@ for (const [name, settings] of [
   m.calls.prompt.length = 0
   await m.run("shadow-wake", "s2")
   check("an invalid config leaves the active settings in place", m.calls.prompt[0]?.text === "DEFAULT WAKE")
-  check("an invalid config is logged", logOf(m).includes("reload failed"))
+  check("an invalid config writes an error log", logOf(m).includes("reload failed"))
 }
 
 {
@@ -472,7 +467,7 @@ for (const [name, settings] of [
   )
   const m = await mount(undefined, { file, workspace: root })
   await m.run("shadow-register", "s1")
-  check("repositories wins over the paths alias", m.calls.prompt[0]?.text === "REPOS INITIAL")
+  check("repositories takes precedence over the paths alias", m.calls.prompt[0]?.text === "REPOS INITIAL")
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

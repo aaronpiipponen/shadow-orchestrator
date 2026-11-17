@@ -205,7 +205,6 @@ export default {
     }
 
     const report = async (sessionID, text) => {
-      log(text)
       if (typeof ctx.session.synthetic !== "function") return
       try {
         await ctx.session.synthetic({ sessionID, text, description: "shadow-orchestrator", resume: false })
@@ -246,7 +245,6 @@ export default {
       refresh()
       state.bindings[workspaceKey] = { sessionID, registeredAt: new Date().toISOString() }
       persist()
-      log(`started ${sessionID} for ${workspaceKey}`)
       try {
         await ctx.session.prompt({ sessionID, text, metadata: PROMPT_METADATA })
       } catch (error) {
@@ -262,6 +260,7 @@ export default {
       refresh()
       const binding = state.bindings[workspaceKey]
       if (!binding?.sessionID) {
+        log(`no binding for ${workspaceKey}`)
         return `No shadow orchestrator is registered for ${workspaceKey}. Run /shadow-register from this workspace.`
       }
       let target
@@ -377,7 +376,6 @@ export default {
               log(`config reload failed, keeping the previous settings: ${error}`)
               return
             }
-            log(`config reloaded (${current().entries.length} repositories)`)
           }, RELOAD_DEBOUNCE)
         })
         watcherEntry = { watcher, users: 0 }
@@ -387,8 +385,6 @@ export default {
       }
     }
     if (watcherEntry) watcherEntry.users += 1
-
-    log(`loaded for ${ctx.location?.directory ?? "an unknown directory"}`)
 
     return async () => {
       const entry = watchers.get(file)
