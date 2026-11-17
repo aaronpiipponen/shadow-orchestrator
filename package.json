@@ -2,7 +2,12 @@
   "name": "shadow-orchestrator",
   "version": "0.1.0",
   "description": "Two-session shadow orchestrator message router for OpenCode v2",
-  "keywords": ["opencode", "opencode-plugin", "orchestrator", "sessions"],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "orchestrator",
+    "sessions"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,10 +17,16 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./tui": "./tui.js"
+    "./tui": "./tui.js",
+    "./rpc": "./rpc.js"
   },
   "scripts": {
     "test": "node test/shadow.test.mjs"
   },
-  "files": ["index.js", "tui.js", "config.example.json"]
+  "files": [
+    "index.js",
+    "tui.js",
+    "rpc.js",
+    "config.example.json"
+  ]
 }

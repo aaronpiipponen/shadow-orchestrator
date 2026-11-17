@@ -10,6 +10,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
+import { Shadow } from "./rpc.js"
+
 const git = promisify(execFile)
 // A config save arrives as a burst of file events, so a reload waits for the burst to end.
 const RELOAD_DEBOUNCE = 150
@@ -212,36 +214,43 @@ export default {
       }
     }
 
-    const workspaceFor = async (sessionID) => {
+    const sessionFor = async (sessionID) => {
       const info = await ctx.session.get({ sessionID })
       const directory = info?.location?.directory ?? ctx.location?.directory
       if (!directory) throw new Error("the session has no directory")
-      return resolveWorkspace(directory)
+      return { directory, model: info?.model }
     }
+
+    const workspaceFor = async (sessionID) => resolveWorkspace((await sessionFor(sessionID)).directory)
 
     const messagesFor = (workspaceKey) => matchEntry(current(), workspaceKey)
 
-    const bind = async (sessionID, workspaceKey, text) => {
+    const start = async ({ directory, workspaceKey, model }, text) => {
+      const created = await ctx.session.create({
+        title: "Shadow Orchestrator",
+        location: { directory },
+        ...(model ? { model } : {}),
+      })
+      const sessionID = created?.id
+      if (!sessionID) throw new Error("the orchestrator session was not created")
       refresh()
       state.bindings[workspaceKey] = { sessionID, registeredAt: new Date().toISOString() }
       persist()
-      log(`bound ${sessionID} to ${workspaceKey}`)
+      log(`started ${sessionID} for ${workspaceKey}`)
       try {
         await ctx.session.prompt({ sessionID, text, metadata: PROMPT_METADATA })
       } catch (error) {
         log(`initial message to ${sessionID} failed: ${error}`)
-        await report(sessionID, `Shadow orchestrator registered for ${workspaceKey}, but the initial message failed.`)
-        return
+        return { sessionID, message: `Shadow orchestrator started for ${workspaceKey} (${sessionID}), but the initial message failed.` }
       }
-      await report(sessionID, `Shadow orchestrator registered for ${workspaceKey}.`)
+      return { sessionID, message: `Shadow orchestrator started for ${workspaceKey} (${sessionID}).` }
     }
 
-    const wake = async (sessionID, workspaceKey, text) => {
+    const wake = async (workspaceKey, text) => {
       refresh()
       const binding = state.bindings[workspaceKey]
       if (!binding?.sessionID) {
-        await report(sessionID, `No shadow orchestrator is registered for ${workspaceKey}. Run /shadow-register in the orchestrator session.`)
-        return
+        return `No shadow orchestrator is registered for ${workspaceKey}. Run /shadow-register from this workspace.`
       }
       let target
       try {
@@ -250,55 +259,46 @@ export default {
         delete state.bindings[workspaceKey]
         persist()
         log(`cleared the binding for ${workspaceKey}: ${error}`)
-        await report(sessionID, `The shadow orchestrator for ${workspaceKey} is gone. Run /shadow-register in the orchestrator session.`)
-        return
+        return `The shadow orchestrator for ${workspaceKey} is gone. Run /shadow-register from this workspace.`
       }
       if (target?.time?.archived) {
         delete state.bindings[workspaceKey]
         persist()
         log(`cleared the archived binding for ${workspaceKey}`)
-        await report(sessionID, `The shadow orchestrator for ${workspaceKey} is archived. Run /shadow-register in the orchestrator session.`)
-        return
+        return `The shadow orchestrator for ${workspaceKey} is archived. Run /shadow-register from this workspace.`
       }
       try {
         await ctx.session.prompt({ sessionID: binding.sessionID, text, metadata: PROMPT_METADATA })
       } catch (error) {
         log(`wake to ${binding.sessionID} failed: ${error}`)
-        await report(sessionID, `The wake message to the shadow orchestrator for ${workspaceKey} failed.`)
-        return
+        return `The wake message to the shadow orchestrator for ${workspaceKey} failed.`
       }
-      await report(sessionID, `Shadow orchestrator woken for ${workspaceKey}.`)
+      return `Shadow orchestrator woken for ${workspaceKey}.`
     }
+
+    const failureMessage = (error) => `The shadow orchestrator command failed: ${error?.message ?? error}`
 
     const guard = (handler) => async (input) => {
       try {
-        await handler(input)
+        await report(input.sessionID, await handler(input))
       } catch (error) {
         log(`command failed: ${error?.stack ?? error}`)
-        await report(input.sessionID, `The shadow orchestrator command failed: ${error?.message ?? error}`)
+        await report(input.sessionID, failureMessage(error))
       }
     }
 
     const definitions = [
       {
         name: "shadow-register",
-        description: "Bind this session as the shadow orchestrator for the current workspace",
+        description: "Start a shadow orchestrator session for the current workspace",
         execute: guard(async ({ sessionID }) => {
-          const workspaceKey = await workspaceFor(sessionID)
-          await bind(sessionID, workspaceKey, messagesFor(workspaceKey).initialMessage)
-        }),
-      },
-      {
-        name: "shadow-register-manual",
-        description: "Bind this session as the shadow orchestrator with a custom message",
-        execute: guard(async ({ sessionID, prompt }) => {
-          const text = (prompt?.text ?? "").trim()
-          if (!text) {
-            await report(sessionID, "No message entered. The command was cancelled.")
-            return
-          }
-          const workspaceKey = await workspaceFor(sessionID)
-          await bind(sessionID, workspaceKey, text)
+          const target = await sessionFor(sessionID)
+          const workspaceKey = await resolveWorkspace(target.directory)
+          const result = await start(
+            { directory: target.directory, workspaceKey, model: target.model },
+            messagesFor(workspaceKey).initialMessage,
+          )
+          return result.message
         }),
       },
       {
@@ -306,26 +306,43 @@ export default {
         description: "Wake the shadow orchestrator for the current workspace",
         execute: guard(async ({ sessionID }) => {
           const workspaceKey = await workspaceFor(sessionID)
-          await wake(sessionID, workspaceKey, messagesFor(workspaceKey).wakeMessage)
-        }),
-      },
-      {
-        name: "shadow-wake-manual",
-        description: "Wake the shadow orchestrator with a custom message",
-        execute: guard(async ({ sessionID, prompt }) => {
-          const text = (prompt?.text ?? "").trim()
-          if (!text) {
-            await report(sessionID, "No message entered. The command was cancelled.")
-            return
-          }
-          const workspaceKey = await workspaceFor(sessionID)
-          await wake(sessionID, workspaceKey, text)
+          return wake(workspaceKey, messagesFor(workspaceKey).wakeMessage)
         }),
       },
     ]
 
     await ctx.command.transform((editor) => {
       for (const definition of definitions) editor.add(definition)
+    })
+
+    await ctx.rpc.register(Shadow, {
+      registerManual: async ({ sessionID, directory, model, text }) => {
+        const message = (text ?? "").trim()
+        if (!message) return { message: "No message entered. The command was cancelled.", sessionID: "" }
+        try {
+          const target = sessionID ? await sessionFor(sessionID) : { directory, model }
+          if (!target.directory) throw new Error("the request has no session or directory")
+          const workspaceKey = await resolveWorkspace(target.directory)
+          return await start(
+            { directory: target.directory, workspaceKey, model: target.model ?? model },
+            message,
+          )
+        } catch (error) {
+          log(`manual registration failed: ${error?.stack ?? error}`)
+          return { message: failureMessage(error), sessionID: "" }
+        }
+      },
+      wakeManual: async ({ sessionID, directory, text }) => {
+        const message = (text ?? "").trim()
+        if (!message) return { message: "No message entered. The command was cancelled." }
+        try {
+          const workspaceKey = sessionID ? await workspaceFor(sessionID) : await resolveWorkspace(directory)
+          return { message: await wake(workspaceKey, message) }
+        } catch (error) {
+          log(`manual wake failed: ${error?.stack ?? error}`)
+          return { message: failureMessage(error) }
+        }
+      },
     })
 
     // The shared map outlives a reloaded build, so an entry can be a bare watcher rather
