@@ -1,0 +1,13 @@
+# Runtime settings and binding state written beside the plugin.
+config.json
+state.json
+
+# Runtime log output.
+*.log
+
+# Local planning notes.
+TODO.md
+
+# Installed dependencies and editor files.
+node_modules/
+.DS_Store
