@@ -353,7 +353,7 @@ for (const [name, settings] of [
   await sleep(400)
   m.calls.prompt.length = 0
   await m.run("shadow-wake", "s2")
-  check("an invalid config keeps the previous settings", m.calls.prompt[0]?.text === "DEFAULT WAKE")
+  check("an invalid config leaves the active settings in place", m.calls.prompt[0]?.text === "DEFAULT WAKE")
   check("an invalid config is logged", logOf(m).includes("reload failed"))
 }
 
@@ -362,7 +362,7 @@ for (const [name, settings] of [
   await first.run("shadow-register", "s1")
   const second = await mount(undefined, { file: first.file, workspace: first.workspace })
   await second.run("shadow-wake", "s2")
-  check("a binding survives a plugin restart", second.calls.prompt[0]?.sessionID === "s1")
+  check("a restarted plugin reads the saved binding", second.calls.prompt[0]?.sessionID === "s1")
   check("a restarted plugin sends the wake message", second.calls.prompt[0]?.text === "DEFAULT WAKE")
 }
 
