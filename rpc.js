@@ -61,5 +61,16 @@ export const Shadow = {
     registerManual: { input: registerInput, output: registerOutput },
     wakeManual: { input: wakeInput, output: wakeOutput },
   },
-  events: {},
+  events: {
+    started: {
+      schema: {
+        type: "object",
+        properties: {
+          sessionID: { type: "string" },
+        },
+        required: ["sessionID"],
+        additionalProperties: false,
+      },
+    },
+  },
 }

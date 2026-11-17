@@ -64,5 +64,15 @@ export default {
         run: () => runManual(context, definition),
       })),
     }))
+    const stop = context.client.rpc(Shadow).events.on("started", (event) => {
+      const sessionID = event?.data?.sessionID
+      if (!sessionID) return
+      const route = context.ui.router.current()
+      const current = route?.type === "session" ? context.data.session.get(route.sessionID) : undefined
+      const directory = current?.location?.directory ?? context.location.directory
+      if (event.location?.directory && event.location.directory !== directory) return
+      context.ui.router.navigate({ type: "session", sessionID })
+    })
+    return () => stop()
   },
 }

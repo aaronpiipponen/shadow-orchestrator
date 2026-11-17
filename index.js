@@ -225,7 +225,17 @@ export default {
 
     const messagesFor = (workspaceKey) => matchEntry(current(), workspaceKey)
 
-    const start = async ({ directory, workspaceKey, model }, text) => {
+    let rpcRegistration
+    const announce = async (sessionID) => {
+      if (!rpcRegistration?.events?.emit) return
+      try {
+        await rpcRegistration.events.emit("started", { sessionID })
+      } catch (error) {
+        log(`start event failed: ${error}`)
+      }
+    }
+
+    const start = async ({ directory, workspaceKey, model }, text, notify = false) => {
       const created = await ctx.session.create({
         title: "Shadow Orchestrator",
         location: { directory },
@@ -241,8 +251,10 @@ export default {
         await ctx.session.prompt({ sessionID, text, metadata: PROMPT_METADATA })
       } catch (error) {
         log(`initial message to ${sessionID} failed: ${error}`)
+        if (notify) await announce(sessionID)
         return { sessionID, message: `Shadow orchestrator started for ${workspaceKey} (${sessionID}), but the initial message failed.` }
       }
+      if (notify) await announce(sessionID)
       return { sessionID, message: `Shadow orchestrator started for ${workspaceKey} (${sessionID}).` }
     }
 
@@ -297,6 +309,7 @@ export default {
           const result = await start(
             { directory: target.directory, workspaceKey, model: target.model },
             messagesFor(workspaceKey).initialMessage,
+            true,
           )
           return result.message
         }),
@@ -315,7 +328,7 @@ export default {
       for (const definition of definitions) editor.add(definition)
     })
 
-    await ctx.rpc.register(Shadow, {
+    rpcRegistration = await ctx.rpc.register(Shadow, {
       registerManual: async ({ sessionID, directory, model, text }) => {
         const message = (text ?? "").trim()
         if (!message) return { message: "No message entered. The command was cancelled.", sessionID: "" }

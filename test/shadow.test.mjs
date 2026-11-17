@@ -52,7 +52,7 @@ async function mount(settings, opts = {}) {
     ["s1", { location: { directory: workspace }, model: { providerID: "provider", id: "model" }, time: {} }],
     ["s2", { location: { directory: workspace }, model: { providerID: "provider", id: "model" }, time: {} }],
   ])
-  const calls = { prompt: [], synthetic: [], create: [] }
+  const calls = { prompt: [], synthetic: [], create: [], events: [] }
   const commands = new Map()
   const rpcMethods = new Map()
   let createdCount = 0
@@ -97,7 +97,14 @@ async function mount(settings, opts = {}) {
     rpc: {
       register: async (_contract, methods) => {
         for (const [name, handler] of Object.entries(methods)) rpcMethods.set(name, handler)
-        return { dispose: async () => {} }
+        return {
+          dispose: async () => {},
+          events: {
+            emit: async (name, data) => {
+              calls.events.push({ name, data })
+            },
+          },
+        }
       },
     },
   }
@@ -191,6 +198,10 @@ for (const [name, settings] of [
     m.calls.synthetic.at(-1)?.sessionID === "s1" && m.calls.synthetic.at(-1)?.text.includes("ses_new_1"),
   )
   check("register writes a log line", logOf(m).includes("started ses_new_1"))
+  check(
+    "register announces the started session",
+    m.calls.events.at(-1)?.name === "started" && m.calls.events.at(-1)?.data?.sessionID === "ses_new_1",
+  )
 }
 
 {
