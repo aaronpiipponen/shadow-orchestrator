@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="/assets/logo.svg" alt="shadow-orchestrator" width="360">
+  <img src="/assets/logo.png" alt="shadow-orchestrator" width="360">
 </p>
 
 <p align="center">
