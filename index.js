@@ -235,9 +235,12 @@ export default {
     }
 
     const start = async ({ directory, workspaceKey, model }, text, notify = false) => {
+      // The session carries the same marker as its prompts, so another plugin can tell a shadow
+      // orchestrator's session apart and refuse to give it a second role.
       const created = await ctx.session.create({
         title: "Shadow Orchestrator",
         location: { directory },
+        metadata: PROMPT_METADATA,
         ...(model ? { model } : {}),
       })
       const sessionID = created?.id

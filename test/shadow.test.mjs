@@ -187,6 +187,7 @@ for (const [name, settings] of [
   check("register starts one session", m.calls.create.length === 1)
   check("register starts the session in the workspace", path.resolve(created?.location?.directory) === path.resolve(m.workspace))
   check("register passes the invoking model", created?.model?.id === "chosen-model")
+  check("register marks the orchestrator session", created?.metadata?.shadowOrchestrator === true)
   check("register binds the started session", binding?.sessionID === "ses_new_1")
   check(
     "register sends the default initial message to the started session",

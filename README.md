@@ -8,7 +8,7 @@ Plan-based workflows suit large mechanical changes. Interactive UI work is a str
 
 ### Registration
 
-Registration starts an orchestrator session in the current workspace and binds it to that workspace. Each workspace holds one binding, so a registration replaces it. The session receives the configured initial message as a user prompt, uses the selected model, and stays idle until a wake arrives.
+Registration starts an orchestrator session in the current workspace and binds it to that workspace. Each workspace holds one binding, so a registration replaces it. The session receives the configured initial message as a user prompt, uses the selected model, and stays idle until a wake arrives. Its metadata carries `shadowOrchestrator: true`, as every prompt the plugin sends does, so another plugin can recognize the session.
 
 The manual mode replaces the configured message with a typed message from a dialog. The terminal UI opens the started session when it shares the OpenCode service.
 
